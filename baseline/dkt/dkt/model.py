@@ -19,15 +19,24 @@ class LSTM(nn.Module):
 
         # Embedding
         # interaction은 현재 correct로 구성되어있다. correct(1, 2) + padding(0)
-        self.embedding_interaction = nn.Embedding(3, self.hidden_dim // 3)
+        self.embedding_interaction = nn.Embedding(2 + 1, self.hidden_dim // 3)
         self.embedding_test = nn.Embedding(self.args.n_test + 1, self.hidden_dim // 3)
         self.embedding_question = nn.Embedding(
             self.args.n_questions + 1, self.hidden_dim // 3
         )
         self.embedding_tag = nn.Embedding(self.args.n_tag + 1, self.hidden_dim // 3)
+        
+        self.embedding_list = nn.ModuleDict({
+            k: nn.Embedding(v + 1, self.hidden_dim // 3) 
+            for k, v in self.args.n_dict.items()
+            })
+        
+        # embedding featrue 갯수
+        N = 4
+        N += self.embedding_list.__len__()
 
         # embedding combination projection
-        self.comb_proj = nn.Linear((self.hidden_dim // 3) * 4, self.hidden_dim)
+        self.comb_proj = nn.Linear((self.hidden_dim // 3) * N, self.hidden_dim)
 
         self.lstm = nn.LSTM(
             self.hidden_dim, self.hidden_dim, self.n_layers, batch_first=True
@@ -49,7 +58,10 @@ class LSTM(nn.Module):
 
     def forward(self, input):
 
-        test, question, tag, _, mask, interaction = input
+        # test, question, tag, _, mask, interaction = input
+        test, question, tag = input[:3]
+        features = input[4:-2]
+        mask, interaction = input[-2:]
 
         batch_size = interaction.size(0)
 
@@ -59,16 +71,32 @@ class LSTM(nn.Module):
         embed_test = self.embedding_test(test)
         embed_question = self.embedding_question(question)
         embed_tag = self.embedding_tag(tag)
+        
+        blacklist = ["userID", "testId", "assessmentItemID", "KnowledgeTag", "answerCode"]
+        whitelist = [i for i in self.args.dataframe_columns if not i in blacklist]
 
-        embed = torch.cat(
-            [
-                embed_interaction,
-                embed_test,
-                embed_question,
-                embed_tag,
-            ],
-            2,
-        )
+        if features:
+            embed_features = [self.embedding_list[key](feature) for key, feature in zip(whitelist, features)]
+            embed = torch.cat(
+                [
+                    embed_interaction,
+                    embed_test,
+                    embed_question,
+                    embed_tag,
+                    *embed_features
+                ],
+                2,
+            )
+        else:
+            embed = torch.cat(
+                [
+                    embed_interaction,
+                    embed_test,
+                    embed_question,
+                    embed_tag,
+                ],
+                2,
+            )
 
         X = self.comb_proj(embed)
 

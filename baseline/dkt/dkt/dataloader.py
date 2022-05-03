@@ -9,6 +9,8 @@ import torch
 import tqdm
 from sklearn.preprocessing import LabelEncoder
 
+from pathlib import Path
+
 
 class Preprocess:
     def __init__(self, args):
@@ -41,7 +43,9 @@ class Preprocess:
         np.save(le_path, encoder.classes_)
 
     def __preprocessing(self, df, is_train=True):
-        cate_cols = ["assessmentItemID", "testId", "KnowledgeTag"]
+        # cate_cols = ["assessmentItemID", "testId", "KnowledgeTag"]
+        # cate_cols_without_userID_answerCode = ["assessmentItemID", "testId", "KnowledgeTag", ...]
+        # ... 는 추가로 더한 feature
         cate_cols_without_userID_answerCode = [i for i in self.args.dataframe_columns if not i in ['userID', 'answerCode']]
 
         if not os.path.exists(self.args.asset_dir):
@@ -103,7 +107,6 @@ class Preprocess:
         df = self.__preprocessing(df, is_train)
 
         # 추후 feature를 embedding할 시에 embedding_layer의 input 크기를 결정할때 사용
-
         self.args.n_questions = len(
             np.load(os.path.join(self.args.asset_dir, "assessmentItemID_classes.npy"))
         )
@@ -114,6 +117,19 @@ class Preprocess:
             np.load(os.path.join(self.args.asset_dir, "KnowledgeTag_classes.npy"))
         )
 
+        # 새 피처를 위한 embedding_layer의 크기 정의
+        len_classes = len('_classes')
+        
+        asset_dir = Path(self.args.asset_dir)
+        blacklist = ['assessmentItemID_classes', 'testId_classes', 'KnowledgeTag_classes']
+        whitelist = [i for i in asset_dir.iterdir() if not i.stem in blacklist]
+        whitelist = [i for i in whitelist if i.stem[:-len_classes] in self.args.dataframe_columns]
+        
+        self.args.n_dict = {
+            i.stem[:-len_classes] : len(np.load(i)) 
+            for i in whitelist
+            }
+        
         df = df.sort_values(by=["userID", "Timestamp"], axis=0)
         # columns = ["userID", "assessmentItemID", "testId", "answerCode", "KnowledgeTag"]
         # group = (
@@ -130,6 +146,8 @@ class Preprocess:
         # )
         
         columns = self.args.dataframe_columns
+        # columns_without_userID = ["testId", "assessmentItemID", "KnowledgeTag", "answerCode", ...]
+        # ... 는 추가로 더한 feature
         columns_without_userID = [i for i in columns if i != 'userID']
         
         def trans(r):
@@ -183,6 +201,8 @@ class DKTDataset(torch.utils.data.Dataset):
         for i, col in enumerate(cate_cols):
             cate_cols[i] = torch.tensor(col)
 
+        # test, question, tag, correct, ... , mask
+        # <...>에는 추가적으로 넣을 feature가 들어갈 것이다.
         return cate_cols
 
     def __len__(self):
@@ -237,3 +257,5 @@ def get_loaders(args, train, valid):
         )
 
     return train_loader, valid_loader
+
+# %%

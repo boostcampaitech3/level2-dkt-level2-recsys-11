@@ -1,6 +1,7 @@
 {
     "model" : "lstm",
     "n_epochs" : 100,
+    
     "dataframe_columns": ["userID", "testId", "assessmentItemID", "KnowledgeTag", "answerCode", "testId_main_category"],
     "wandb_mode": "offline"
 }

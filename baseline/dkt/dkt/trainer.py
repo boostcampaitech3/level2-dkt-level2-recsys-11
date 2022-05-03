@@ -206,11 +206,14 @@ def get_model(args):
 # 배치 전처리
 def process_batch(batch, args):
 
-    test, question, tag, correct, mask = batch
+    # test, question, tag, correct, mask = batch
+    test, question, tag, correct = batch[:4]
+    features = batch[4:-1]
+    mask = batch[-1]
 
     # change to float
-    mask = mask.type(torch.FloatTensor)
     correct = correct.type(torch.FloatTensor)
+    mask = mask.type(torch.FloatTensor)
 
     # interaction을 임시적으로 correct를 한칸 우측으로 이동한 것으로 사용
     interaction = correct + 1  # 패딩을 위해 correct값에 1을 더해준다.
@@ -223,19 +226,22 @@ def process_batch(batch, args):
     test =      ((test      + 1) * mask).to(torch.int64)
     question =  ((question  + 1) * mask).to(torch.int64)
     tag =       ((tag       + 1) * mask).to(torch.int64)
+    
+    features = [((feature   + 1) * mask).to(torch.int64) for feature in features]
 
     # device memory로 이동
 
-    test = test.to(args.device)
-    question = question.to(args.device)
-
-    tag     = tag.to(args.device)
-    correct = correct.to(args.device)
-    mask    = mask.to(args.device)
-
+    test        = test.to(args.device)
+    question    = question.to(args.device)
+    tag         = tag.to(args.device)
+    correct     = correct.to(args.device)
+    
+    features = [feature.to(args.device) for feature in features]
+    
+    mask        = mask.to(args.device)
     interaction = interaction.to(args.device)
 
-    return (test, question, tag, correct, mask, interaction)
+    return (test, question, tag, correct, *features, mask, interaction)
 
 
 # loss계산하고 parameter update!
