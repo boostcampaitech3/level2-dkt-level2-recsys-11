@@ -220,18 +220,18 @@ def process_batch(batch, args):
     interaction = (interaction * interaction_mask).to(torch.int64)
 
     #  test_id, question_id, tag
-    test = ((test + 1) * mask).to(torch.int64)
-    question = ((question + 1) * mask).to(torch.int64)
-    tag = ((tag + 1) * mask).to(torch.int64)
+    test =      ((test      + 1) * mask).to(torch.int64)
+    question =  ((question  + 1) * mask).to(torch.int64)
+    tag =       ((tag       + 1) * mask).to(torch.int64)
 
     # device memory로 이동
 
     test = test.to(args.device)
     question = question.to(args.device)
 
-    tag = tag.to(args.device)
+    tag     = tag.to(args.device)
     correct = correct.to(args.device)
-    mask = mask.to(args.device)
+    mask    = mask.to(args.device)
 
     interaction = interaction.to(args.device)
 

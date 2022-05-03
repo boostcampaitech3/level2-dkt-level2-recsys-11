@@ -142,10 +142,10 @@ class LSTMATTN(nn.Module):
         batch_size = interaction.size(0)
 
         # Embedding
-        embed_interaction = self.embedding_interaction(interaction)
         embed_test = self.embedding_test(test)
         embed_question = self.embedding_question(question)
         embed_tag = self.embedding_tag(tag)
+        embed_interaction = self.embedding_interaction(interaction)
 
         embed = torch.cat(
             [
