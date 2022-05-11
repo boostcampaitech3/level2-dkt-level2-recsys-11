@@ -373,11 +373,7 @@ for i in pieces:
     _train, _valid = mk_train_valid_dataset(i)
     trains.append(_train)
     valids.append(_valid)
-    
 
-
-# %%
-test = test.fillna(0)
 
 # %%
 save_root = '/opt/ml/input/data/FE_dataset/kfold'
@@ -412,7 +408,6 @@ FEATS = ['testId',
 # %%
 # train = pd.read_csv(save_root + "/train_after.csv")
 # valid = pd.read_csv(save_root + "/valid_after.csv")
-test = pd.read_csv(save_root + '/test_after.csv')
 
 # # %%
 # from sklearn.preprocessing import OrdinalEncoder, LabelEncoder
@@ -610,21 +605,16 @@ for i in range(n_kfold):
     #VALID AUC : 0.8290278343651559 ACC : 0.7548579970104634 - LGBM3 2000round 처음낸거
 
 
-# %%
-## 불러올때 이렇게 불러와야된다 ~!!!
-model = lgb.Booster(model_file='/opt/ml/output/LGBM_2.txt')
 
-# %%
-# Feature Importance 파악
-import matplotlib.pyplot as plt
-ax = lgb.plot_importance(model)
-fig = ax.figure
-fig.set_size_inches(30, 40)
 
 # %% [markdown]
 # # INFERENCE
 
 # %%
+import pandas as pd
+
+test = pd.read_csv(save_root + '/test_after.csv')
+test = test.fillna(0)
 # LEAVE LAST INTERACTION ONLY
 test = test[test['userID'] != test['userID'].shift(-1)]
 # DROP ANSWERCODE
@@ -632,10 +622,36 @@ y_test = test['answerCode']
 test = test.drop(['answerCode'], axis=1)
 
 # %%
+test_last = pd.read_csv(save_root + '/test_after.csv')
+test_last = test_last.fillna(0)
+test_last = test_last[~test_last.index.isin(test.index)]
+# DROP ANSWERCODE
+y_test_last = test_last['answerCode']
+test_last = test_last.drop(['answerCode'], axis=1)
+
+# %%
 # rows 744인거 확인하기
 test
 # %%
 # MAKE PREDICTION
+import lightgbm as lgb
+from sklearn.metrics import roc_auc_score, accuracy_score
+
+output_root = '/opt/ml/output/kfold'
+save_root = '/opt/ml/input/data/FE_dataset/kfold'
+
+for i in range(n_kfold):
+    model = lgb.Booster(model_file=f'{output_root}/LGBM_{i}.txt')
+    total_preds = model.predict(test_last[FEATS])
+    acc = accuracy_score(y_test_last, np.where(total_preds >= 0.5, 1, 0))
+    auc = roc_auc_score(y_test_last, total_preds)
+    print(f"acc_{i}\t{acc}")
+    print(f"auc_{i}\t{auc}")
+
+# %%
+# 모델 선택
+i = 1
+model = lgb.Booster(model_file=f'{output_root}/LGBM_{i}.txt')
 total_preds = model.predict(test[FEATS])
 
 # %%
