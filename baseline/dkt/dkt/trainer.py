@@ -206,11 +206,14 @@ def get_model(args):
 # 배치 전처리
 def process_batch(batch, args):
 
-    test, question, tag, correct, mask = batch
+    # test, question, tag, correct, mask = batch
+    test, question, tag, correct = batch[:4]
+    features = batch[4:-1]
+    mask = batch[-1]
 
     # change to float
-    mask = mask.type(torch.FloatTensor)
     correct = correct.type(torch.FloatTensor)
+    mask = mask.type(torch.FloatTensor)
 
     # interaction을 임시적으로 correct를 한칸 우측으로 이동한 것으로 사용
     interaction = correct + 1  # 패딩을 위해 correct값에 1을 더해준다.
@@ -220,22 +223,25 @@ def process_batch(batch, args):
     interaction = (interaction * interaction_mask).to(torch.int64)
 
     #  test_id, question_id, tag
-    test = ((test + 1) * mask).to(torch.int64)
-    question = ((question + 1) * mask).to(torch.int64)
-    tag = ((tag + 1) * mask).to(torch.int64)
+    test =      ((test      + 1) * mask).to(torch.int64)
+    question =  ((question  + 1) * mask).to(torch.int64)
+    tag =       ((tag       + 1) * mask).to(torch.int64)
+    
+    features = [((feature   + 1) * mask).to(torch.int64) for feature in features]
 
     # device memory로 이동
 
-    test = test.to(args.device)
-    question = question.to(args.device)
-
-    tag = tag.to(args.device)
-    correct = correct.to(args.device)
-    mask = mask.to(args.device)
-
+    test        = test.to(args.device)
+    question    = question.to(args.device)
+    tag         = tag.to(args.device)
+    correct     = correct.to(args.device)
+    
+    features = [feature.to(args.device) for feature in features]
+    
+    mask        = mask.to(args.device)
     interaction = interaction.to(args.device)
 
-    return (test, question, tag, correct, mask, interaction)
+    return (test, question, tag, correct, *features, mask, interaction)
 
 
 # loss계산하고 parameter update!
@@ -282,3 +288,189 @@ def load_model(args):
 
     print("Loading Model from:", model_path, "...Finished.")
     return model
+
+import copy
+from dkt.dataloader import DKTDataset
+import gc
+
+class Trainer:
+    def __init__(self):
+        pass
+
+    def train(self, args, train_data, valid_data):
+        """훈련을 마친 모델을 반환한다"""
+
+        # args update
+        self.args = args
+
+         # 캐시 메모리 비우기 및 가비지 컬렉터 가동!
+        torch.cuda.empty_cache()
+        gc.collect()
+
+        # augmentation
+        augmented_train_data = data_augmentation(train_data, args)
+        if len(augmented_train_data) != len(train_data):
+            print(f"Data Augmentation applied. Train data {len(train_data)} -> {len(augmented_train_data)}\n")
+
+        train_loader, valid_loader = get_loaders(args, augmented_train_data, valid_data)
+        
+        # only when using warmup scheduler
+        args.total_steps = int(len(train_loader.dataset) / args.batch_size) * (args.n_epochs)
+        args.warmup_steps = args.total_steps // 10
+            
+        model = get_model(args)
+        optimizer = get_optimizer(model, args)
+        scheduler = get_scheduler(optimizer, args)
+
+        best_auc = -1
+        best_model = -1
+        for epoch in range(args.n_epochs):
+
+            ### TRAIN
+            train_auc, train_acc = train(train_loader, model, optimizer, args)
+            
+            ### VALID
+            valid_auc, valid_acc, preds, targets = validate(valid_loader, model, args)
+
+            ### TODO: model save or early stopping
+            if valid_auc > best_auc:
+                best_auc = valid_auc
+                best_model = copy.deepcopy(model)
+
+            # scheduler
+            if args.scheduler == 'plateau':
+                scheduler.step(best_auc)
+            else:
+                scheduler.step()
+
+        return best_model
+
+    def evaluate(self, args, model, valid_data):
+        """훈련된 모델과 validation 데이터셋을 제공하면 predict 반환"""
+        pin_memory = False
+
+        valset = DKTDataset(valid_data, args)
+        valid_loader = torch.utils.data.DataLoader(valset, shuffle=False,
+                                                   batch_size=args.batch_size,
+                                                   pin_memory=pin_memory,
+                                                   collate_fn=collate)
+
+        auc, acc, preds, _ = validate(valid_loader, model, args)
+        print(f"AUC : {auc}, ACC : {acc}")
+
+        return preds
+
+    def test(self, args, model, test_data):
+        return self.evaluate(args, model, test_data)
+
+    def get_target(self, datas):
+        targets = []
+        for data in datas:
+            targets.append(data[-1][-1])
+
+        return np.array(targets)
+    
+
+from sklearn.model_selection import KFold
+from sklearn.model_selection import StratifiedKFold
+
+class Stacking:
+    def __init__(self, trainer):
+        self.trainer = trainer
+
+
+    def get_train_oof(self, args, data, fold_n=5, stratify=True):
+
+        oof = np.zeros(data.shape[0])
+
+        fold_models = []
+
+        if stratify:
+            kfold = StratifiedKFold(n_splits=fold_n)
+        else:
+            kfold = KFold(n_splits=fold_n)
+
+        # 클래스 비율 고려하여 Fold별로 데이터 나눔
+        target = self.trainer.get_target(data)
+        for i, (train_index, valid_index) in enumerate(kfold.split(data, target)):
+            train_data, valid_data = data[train_index], data[valid_index]
+
+            # 모델 생성 및 훈련
+            print(f'Calculating train oof {i + 1}')
+            trained_model = self.trainer.train(args, train_data, valid_data)
+
+            # 모델 검증
+            predict = self.trainer.evaluate(args, trained_model, valid_data)
+            
+            # fold별 oof 값 모으기
+            oof[valid_index] = predict
+            fold_models.append(trained_model)
+
+        return oof, fold_models
+
+    def get_test_avg(self, args, models, test_data):
+        predicts = np.zeros(test_data.shape[0])
+
+        # 클래스 비율 고려하여 Fold별로 데이터 나눔
+        for i, model in enumerate(models):
+            print(f'Calculating test avg {i + 1}')
+            predict = self.trainer.test(args, model, test_data)
+              
+            # fold별 prediction 값 모으기
+            predicts += predict
+
+        # prediction들의 average 계산
+        predict_avg = predicts / len(models)
+
+        return predict_avg
+
+
+    def train_oof_stacking(self, args_list, data, fold_n=5, stratify=True):
+    
+        S_train = None
+        models_list = []
+        for i, args in enumerate(args_list):
+            print(f'training oof stacking model [ {i + 1} ]')
+            train_oof, models = self.get_train_oof(args, data, fold_n=fold_n, stratify=stratify)
+            train_oof = train_oof.reshape(-1, 1)
+
+            # oof stack!
+            if not isinstance(S_train, np.ndarray):
+                S_train = train_oof
+            else:
+                S_train = np.concatenate([S_train, train_oof], axis=1)
+
+            # store fold models
+            models_list.append(models)
+
+        return models_list, S_train
+
+    def test_avg_stacking(self, args, models_list, test_data):
+    
+        S_test = None
+        for i, models in enumerate(models_list):
+            print(f'test average stacking model [ {i + 1} ]')
+            test_avg = self.get_test_avg(args, models, test_data)
+            test_avg = test_avg.reshape(-1, 1)
+
+            # avg stack!
+            if not isinstance(S_test, np.ndarray):
+                S_test = test_avg
+            else:
+                S_test = np.concatenate([S_test, test_avg], axis=1)
+
+        return S_test
+
+
+    def train(self, meta_model, args_list, data):
+        models_list, S_train = self.train_oof_stacking(args_list, data)
+        target = self.trainer.get_target(data)
+        meta_model.fit(S_train, target)
+        
+        return meta_model, models_list, S_train, target
+
+    def test(self, meta_model, models_list, test_data):
+        S_test = self.test_avg_stacking(args, models_list, test_data)
+        predict = meta_model.predict(S_test)
+
+        return predict, S_test

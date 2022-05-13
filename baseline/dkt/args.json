@@ -1,0 +1,8 @@
+{
+    "model" : "lstm",
+    "n_epochs" : 100,
+    "patience" : 10,
+
+    "dataframe_columns": ["userID", "testId", "assessmentItemID", "KnowledgeTag", "answerCode"],
+    "wandb_mode": "online"
+}

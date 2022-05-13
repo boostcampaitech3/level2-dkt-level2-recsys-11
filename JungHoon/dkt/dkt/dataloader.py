@@ -9,8 +9,6 @@ import torch
 import tqdm
 from sklearn.preprocessing import LabelEncoder
 
-from pathlib import Path
-
 
 class Preprocess:
     def __init__(self, args):
@@ -43,16 +41,12 @@ class Preprocess:
         np.save(le_path, encoder.classes_)
 
     def __preprocessing(self, df, is_train=True):
-        # cate_cols = ["assessmentItemID", "testId", "KnowledgeTag"]
-        # cate_cols_without_userID_answerCode = ["assessmentItemID", "testId", "KnowledgeTag", ...]
-        # ... 는 추가로 더한 feature
-        cate_cols_without_userID_answerCode = [i for i in self.args.dataframe_columns if not i in ['userID', 'answerCode']]
+        cate_cols = ["assessmentItemID", "testId", "KnowledgeTag"]
 
         if not os.path.exists(self.args.asset_dir):
             os.makedirs(self.args.asset_dir)
 
-        # for col in cate_cols:
-        for col in cate_cols_without_userID_answerCode:
+        for col in cate_cols:
 
             le = LabelEncoder()
             if is_train:
@@ -83,23 +77,10 @@ class Preprocess:
 
         return df
 
-    # %%
     def __feature_engineering(self, df):
         # TODO
-        df['testId_main_category'] = df['testId'].map(lambda x: x[2])
         return df
 
-    if __name__ == '__main__':
-        import pandas as pd
-        from IPython.display import display
-        df = pd.read_csv('/opt/ml/input/data/train_data.csv')
-        
-        dfe = __feature_engineering(None, df)
-        display(dfe)
-        for col in dfe.columns:
-            print(f'{col}\t::\t{type(col)}')#, end='\t')
-    
-    # %%
     def load_data_from_file(self, file_name, is_train=True):
         csv_file_path = os.path.join(self.args.data_dir, file_name)
         df = pd.read_csv(csv_file_path)  # , nrows=100000)
@@ -107,6 +88,7 @@ class Preprocess:
         df = self.__preprocessing(df, is_train)
 
         # 추후 feature를 embedding할 시에 embedding_layer의 input 크기를 결정할때 사용
+
         self.args.n_questions = len(
             np.load(os.path.join(self.args.asset_dir, "assessmentItemID_classes.npy"))
         )
@@ -117,48 +99,21 @@ class Preprocess:
             np.load(os.path.join(self.args.asset_dir, "KnowledgeTag_classes.npy"))
         )
 
-        # 새 피처를 위한 embedding_layer의 크기 정의
-        len_classes = len('_classes')
-        
-        asset_dir = Path(self.args.asset_dir)
-        blacklist = ['assessmentItemID_classes', 'testId_classes', 'KnowledgeTag_classes']
-        whitelist = [i for i in asset_dir.iterdir() if not i.stem in blacklist]
-        whitelist = [i for i in whitelist if i.stem[:-len_classes] in self.args.dataframe_columns]
-        
-        self.args.n_dict = {
-            i.stem[:-len_classes] : len(np.load(i)) 
-            for i in whitelist
-            }
-        
         df = df.sort_values(by=["userID", "Timestamp"], axis=0)
-        # columns = ["userID", "assessmentItemID", "testId", "answerCode", "KnowledgeTag"]
-        # group = (
-        #     df[columns]
-        #     .groupby("userID")
-        #     .apply(
-        #         lambda r: (
-        #             r["testId"].values,
-        #             r["assessmentItemID"].values,
-        #             r["KnowledgeTag"].values,
-        #             r["answerCode"].values,
-        #         )
-        #     )
-        # )
-        
-        columns = self.args.dataframe_columns
-        # columns_without_userID = ["testId", "assessmentItemID", "KnowledgeTag", "answerCode", ...]
-        # ... 는 추가로 더한 feature
-        columns_without_userID = [i for i in columns if i != 'userID']
-        
-        def trans(r):
-            return tuple(r[col].values for col in columns_without_userID)
-
+        columns = ["userID", "assessmentItemID", "testId", "answerCode", "KnowledgeTag"]
         group = (
             df[columns]
             .groupby("userID")
-            .apply(trans)
+            .apply(
+                lambda r: (
+                    r["testId"].values,
+                    r["assessmentItemID"].values,
+                    r["KnowledgeTag"].values,
+                    r["answerCode"].values,
+                )
+            )
         )
-        
+
         return group.values
 
     def load_train_data(self, file_name):
@@ -179,11 +134,9 @@ class DKTDataset(torch.utils.data.Dataset):
         # 각 data의 sequence length
         seq_len = len(row[0])
 
-        # 비효율적이고 다른 피쳐도 반영시키기 위해 변형
-        # test, question, tag, correct = row[0], row[1], row[2], row[3]
+        test, question, tag, correct = row[0], row[1], row[2], row[3]
 
-        # cate_cols = [test, question, tag, correct]
-        cate_cols = list(row)
+        cate_cols = [test, question, tag, correct]
 
         # max seq len을 고려하여서 이보다 길면 자르고 아닐 경우 그대로 냅둔다
         if seq_len > self.args.max_seq_len:
@@ -201,8 +154,6 @@ class DKTDataset(torch.utils.data.Dataset):
         for i, col in enumerate(cate_cols):
             cate_cols[i] = torch.tensor(col)
 
-        # test, question, tag, correct, ... , mask
-        # <...>에는 추가적으로 넣을 feature가 들어갈 것이다.
         return cate_cols
 
     def __len__(self):
@@ -257,5 +208,3 @@ def get_loaders(args, train, valid):
         )
 
     return train_loader, valid_loader
-
-# %%

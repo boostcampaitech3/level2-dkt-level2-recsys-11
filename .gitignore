@@ -1,2 +1,7 @@
 data/
 *.csv
+**/__pycache__
+**/wandb
+**/asset
+**/Feature_Engineering
+**/LGBM
