@@ -41,9 +41,8 @@ class Preprocess:
         np.save(le_path, encoder.classes_)
 
     def __preprocessing(self, df, is_train=True):
-        # cate_cols = ["assessmentItemID", "testId", "KnowledgeTag"]
-        cate_cols = ["assessmentItemID", "testId", "KnowledgeTag","elapsed","Question_acc","RepeatedTime","ass_elp_x"]
-        
+        cate_cols = ["assessmentItemID", "testId", "KnowledgeTag"]
+
         if not os.path.exists(self.args.asset_dir):
             os.makedirs(self.args.asset_dir)
 
@@ -68,13 +67,13 @@ class Preprocess:
             test = le.transform(df[col])
             df[col] = test
 
-        # def convert_time(s):
-        #     timestamp = time.mktime(
-        #         datetime.strptime(s, "%Y-%m-%d %H:%M:%S").timetuple()
-        #     )
-        #     return int(timestamp)
+        def convert_time(s):
+            timestamp = time.mktime(
+                datetime.strptime(s, "%Y-%m-%d %H:%M:%S").timetuple()
+            )
+            return int(timestamp)
 
-        # df["Timestamp"] = df["Timestamp"].apply(convert_time)
+        df["Timestamp"] = df["Timestamp"].apply(convert_time)
 
         return df
 
@@ -99,22 +98,9 @@ class Preprocess:
         self.args.n_tag = len(
             np.load(os.path.join(self.args.asset_dir, "KnowledgeTag_classes.npy"))
         )
-        self.args.n_elapsed=len(
-            np.load(os.path.join(self.args.asset_dir, "elapsed_classes.npy"))
-        )  
-        self.args.n_Question_acc=len(
-            np.load(os.path.join(self.args.asset_dir, "Question_acc_classes.npy"))
-        )
-        self.args.n_RepeatedTime=len(
-            np.load(os.path.join(self.args.asset_dir, "RepeatedTime_classes.npy"))
-        )
-        self.args.n_ass_elp_x=len(
-            np.load(os.path.join(self.args.asset_dir, "ass_elp_x_classes.npy"))
-        )
-
 
         df = df.sort_values(by=["userID", "Timestamp"], axis=0)
-        columns = ["userID", "assessmentItemID", "testId", "answerCode", "KnowledgeTag","elapsed","Question_acc","RepeatedTime","ass_elp_x"]
+        columns = ["userID", "assessmentItemID", "testId", "answerCode", "KnowledgeTag"]
         group = (
             df[columns]
             .groupby("userID")
@@ -124,26 +110,9 @@ class Preprocess:
                     r["assessmentItemID"].values,
                     r["KnowledgeTag"].values,
                     r["answerCode"].values,
-                    r['elapsed'].values,
-                    r['Question_acc'].values,
-                    r['RepeatedTime'].values,
-                    r['ass_elp_x'].values
                 )
             )
         )
-        # columns = ["userID", "assessmentItemID", "testId", "answerCode", "KnowledgeTag"]
-        # group = (
-        #     df[columns]
-        #     .groupby("userID")
-        #     .apply(
-        #         lambda r: (
-        #             r["testId"].values,
-        #             r["assessmentItemID"].values,
-        #             r["KnowledgeTag"].values,
-        #             r["answerCode"].values,
-        #         )
-        #     )
-        # )
 
         return group.values
 
@@ -165,13 +134,10 @@ class DKTDataset(torch.utils.data.Dataset):
         # 각 data의 sequence length
         seq_len = len(row[0])
 
-        # test, question, tag, correct = row[0], row[1], row[2], row[3]
+        test, question, tag, correct = row[0], row[1], row[2], row[3]
 
-        # cate_cols = [test, question, tag, correct]
-        test, question, tag, correct,elapsed,qacc,rtime,asselp = row[0], row[1], row[2], row[3],row[4],row[5],row[6],row[7]
+        cate_cols = [test, question, tag, correct]
 
-        cate_cols = [test, question, tag, correct,elapsed,qacc,rtime,asselp]
-        
         # max seq len을 고려하여서 이보다 길면 자르고 아닐 경우 그대로 냅둔다
         if seq_len > self.args.max_seq_len:
             for i, col in enumerate(cate_cols):
