@@ -5,12 +5,12 @@ import numpy as np
 import torch
 import wandb
 
-from .criterion import get_criterion
-from .dataloader import get_loaders
-from .metric import get_metric
-from .model import LSTM, LSTMATTN, Bert
-from .optimizer import get_optimizer
-from .scheduler import get_scheduler
+from criterion import get_criterion
+from dataloader import get_loaders
+from metric import get_metric
+from model import LSTM, LSTMATTN, Bert
+from optimizer import get_optimizer
+from scheduler import get_scheduler
 
 
 def run(args, train_data, valid_data):
