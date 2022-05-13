@@ -2,7 +2,7 @@ from dkt.trainer import *
 
 from sklearn.linear_model import LinearRegression
 from dkt.utils import setSeeds
-
+from copy import deepcopy
 
 
 import os
@@ -29,6 +29,9 @@ def main(args):
     train_data = preprocess.get_train_data()
 
     train_data, valid_data = preprocess.split_data(train_data)
+    
+    # args 생성.
+    args_list = [deepcopy(args) for _ in range(5)]
     
     # seed 설정 
     setSeeds(args.seed)
