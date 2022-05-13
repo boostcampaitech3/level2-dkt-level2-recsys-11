@@ -8,7 +8,7 @@ import wandb
 from criterion import get_criterion
 from dataloader import get_loaders
 from metric import get_metric
-from model import LSTM, LSTMATTN, Bert
+from model import LSTM, LSTMATTN, Bert,Saint,PlusSAINTModule
 from optimizer import get_optimizer
 from scheduler import get_scheduler
 
@@ -197,7 +197,10 @@ def get_model(args):
         model = LSTMATTN(args)
     if args.model == "bert":
         model = Bert(args)
-
+    if args.model == "saint":
+        model = Saint(args)
+    if args.model == "saintplus":
+        model = PlusSAINTModule(args)
     model.to(args.device)
 
     return model
@@ -206,7 +209,8 @@ def get_model(args):
 # 배치 전처리
 def process_batch(batch, args):
 
-    test, question, tag, correct, mask = batch
+    # test, question, tag, correct, mask = batch
+    test, question, tag, correct,elapsed,qacc,rtime,asselp, mask = batch
 
     # change to float
     mask = mask.type(torch.FloatTensor)
@@ -223,6 +227,10 @@ def process_batch(batch, args):
     test = ((test + 1) * mask).to(torch.int64)
     question = ((question + 1) * mask).to(torch.int64)
     tag = ((tag + 1) * mask).to(torch.int64)
+    elapsed = ((elapsed + 1) * mask).to(torch.int64)
+    qacc = ((qacc + 1) * mask).to(torch.int64)
+    rtime = ((rtime + 1) * mask).to(torch.int64)
+    asselp = ((asselp + 1) * mask).to(torch.int64)
 
     # device memory로 이동
 
@@ -232,10 +240,15 @@ def process_batch(batch, args):
     tag = tag.to(args.device)
     correct = correct.to(args.device)
     mask = mask.to(args.device)
+    elapsed=elapsed.to(args.device)
+    qacc=qacc.to(args.device)
+    rtime=rtime.to(args.device)
+    asselp=asselp.to(args.device)
 
     interaction = interaction.to(args.device)
-
-    return (test, question, tag, correct, mask, interaction)
+    return (test, question, tag, correct,elapsed,qacc,rtime,asselp, mask, interaction)
+    
+    # return (test, question, tag, correct, mask, interaction)
 
 
 # loss계산하고 parameter update!
