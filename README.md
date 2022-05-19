@@ -14,7 +14,7 @@ DKT를 활용하면, 학생 개개인의 학습상태 예측이 가능해지고,
 
 
 ## 평가 방법
-DKT는 주어진 마지막 문제를 맞았는지 틀렸는지 분류하는 이진 분류 문제다. 그래서 평가를 위해 AUROC(Area Under the ROC curve)와 Accuracy를 사용한다.
+DKT는 주어진 마지막 문제를 맞았는지 틀렸는지 분류하는 이진 분류 문제입니다. 그래서 평가를 위해 AUROC(Area Under the ROC curve)와 Accuracy를 사용다.
 
 
 ## Members
