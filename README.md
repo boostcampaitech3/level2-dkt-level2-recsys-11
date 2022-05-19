@@ -57,6 +57,7 @@ code
 ## 실험 기록
 <p align="center"><img src="https://user-images.githubusercontent.com/69205130/169275163-d0409a1f-58ea-4914-9289-edde4339b4eb.png"></p>
 
+
 ## Modeling
 ### LightGCN (0.5927) 
 
@@ -101,6 +102,8 @@ custom Feature Engineering을 함으로써 성능을 조금씩 올려 갔다.
 - answerCode와 Value의 sum, mean, std, skew
 - Value로부터 얻을 수 있는 분류적인 부분 (day_of_week,grade, last_problem, etc… )
  
+
+
 ## Cross Validation
 ### K-Fold
 validation dataset이 훈련에 활용되지 못하는 점을 보완하기 위해 Kfold 방법을 적용하고자 사용.
